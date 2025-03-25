@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sweater Stitch Calculator - Metric Version</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="max-w-screen-lg mx-auto p-4">
+    <div class="flex justify-between items-center mb-4">
+      <a href="index.html" class="text-blue-600 hover:underline">← Back to Home</a>
+    </div>
+    
+    <div id="root"></div>
+  </div>
+
+  <script type="text/babel">
+    const SweaterCalculator = () => {
+      const [gaugeSwatchStats, setGaugeSwatchStats] = React.useState({
+        stitchCount: 20,
+        width: 10,       // cm instead of inches
+        rowCount: 28,
+        height: 10       // cm instead of inches
+      });
+      
+      const [measurements, setMeasurements] = React.useState({
+        bustCircumference: 91.5,   // 36 inches = 91.5 cm
+        waistCircumference: 81.3,  // 32 inches = 81.3 cm
+        torsoLength: 35.5,         // 14 inches = 35.5 cm
+        ribbingLength: 5,          // 2 inches = 5 cm
+        armLength: 45.7,           // 18 inches = 45.7 cm
+        yarnWeight: "medium"       // Default to medium weight yarn
+      });
+      
+      const [yarnSearch, setYarnSearch] = React.useState({
+        brand: "",
+        searching: false,
+        results: null,
+        error: null,
+        lastSearchData: null,
+        yarnDetails: null
+      });
+      
+      const [results, setResults] = React.useState(null);
+      
+      const handleGaugeChange = (e) => {
+        const { name, value } = e.target;
+        setGaugeSwatchStats(prev => ({
+          ...prev,
+          [name]: parseFloat(value) || 0
+        }));
+      };
+      
+      const handleMeasurementChange = (e) => {
+        const { name, value } = e.target;
+        setMeasurements(prev => ({
+          ...prev,
+          [name]: name === 'yarnWeight' ? value : parseFloat(value) || 0
+        }));
+      };
+      
+      const handleYarnSearchChange = (e) => {
+        setYarnSearch(prev => ({
+          ...prev,
+          brand: e.target.value
+        }));
+      };
+      
+      const calculateStitchCounts = () => {
+        // Calculate gauges
+        const stitchGauge = gaugeSwatchStats.stitchCount / gaugeSwatchStats.width;
+        const rowGauge = gaugeSwatchStats.rowCount / gaugeSwatchStats.height;
+        
+        // Calculate stitch counts
+        const bustStitchCount = Math.round(stitchGauge * measurements.bustCircumference);
+        const waistStitchCount = Math.round(stitchGauge * measurements.waistCircumference);
+        const ribbingStitchCount = Math.round(bustStitchCount * 0.9); // 10% fewer stitches than bust
+        const upperArmStitchCount = Math.round((bustStitchCount * 0.333) + (stitchGauge * 2.54)); // 33.3% of bust stitches + 1 inch of stitches (2.54 cm)
+        const cuffRibbingStitchCount = Math.round(bustStitchCount * 0.2); // 20% of bust stitch count
+        const underarmStitchCount = Math.round(bustStitchCount * 0.08); // 8% of bust stitch count
+        const sleeveIncreases = upperArmStitchCount - cuffRibbingStitchCount; // Number of increases needed
+        
+        // Calculate row counts
+        const bodyRows = Math.round(rowGauge * (measurements.torsoLength - measurements.ribbingLength));
+        const sleeveRows = Math.round(rowGauge * (measurements.armLength - 10.16)); // 4 inches = 10.16 cm
+        const cuffRibbingRows = Math.round(rowGauge * 5.08); // 2 inches = 5.08 cm
+        
+        // Calculate yarn requirements based on the size chart
+        // Convert metric bust size to inches for reference chart lookup
+        const bustInches = Math.round(measurements.bustCircumference / 2.54);
+        
+        // Size chart reference values (in inches and ounces)
+        const sizeChart = {
+          light: { // Fine yarn weights
+            46: 15, 44: 14, 42: 13, 40: 12, 38: 11, 36: 10, 34: 9,
+            32: 8, 30: 7, 28: 6, 26: 5, 24: 4, 22: 3
+          },
+          medium: { // Medium yarn weights
+            46: 23, 44: 22, 42: 21, 40: 20, 38: 19, 36: 18, 34: 17,
+            32: 16, 30: 15, 28: 14, 26: 13, 24: 12, 22: 11
+          },
+          heavy: { // Heavy yarn weights
+            46: 31, 44: 30, 42: 29, 40: 28, 38: 27, 36: 26, 34: 25,
+            32: 24, 30: 23, 28: 22, 26: 21, 24: 20, 22: 19
+          }
+        };
+        
+        // Find the closest bust size in the chart
+        const bustSizes = Object.keys(sizeChart.medium).map(Number);
+        const closestSize = bustSizes.reduce((prev, curr) => {
+          return (Math.abs(curr - bustInches) < Math.abs(prev - bustInches) 
+                  ? curr 
+                  : prev);
+        });
+        
+        // Get yarn weight in ounces from the chart
+        const yarnWeightOz = sizeChart[measurements.yarnWeight][closestSize] || 0;
+        
+        // Calculate yardage based on standard conversions from weight
+        // Yards per ounce for different yarn weights
+        const yardsPerOunce = {
+          light: 110,    // Fingering/Sport weight
+          medium: 80,    // DK/Worsted weight
+          heavy: 50      // Bulky/Chunky weight
+        };
+        
+        const yarnYardage = Math.round(yarnWeightOz * yardsPerOunce[measurements.yarnWeight]);
+        
+        // Convert to metric
+        const yarnWeightGrams = Math.round(yarnWeightOz * 28.35); // 1 oz = 28.35g
+        const yarnMeters = Math.round(yarnYardage * 0.9144); // 1 yard = 0.9144m
+        
+        // Standard yarn ball sizes by weight category in grams
+        const standardBallSizes = {
+          light: 50,    // Fingering/Sport weight typically comes in 50g balls
+          medium: 100,  // DK/Worsted weight typically comes in 100g balls
+          heavy: 100    // Bulky/Chunky weight typically comes in 100g balls
+        };
+        
+        // Standard meterage per ball by weight category
+        const standardMeteragePerBall = {
+          light: 200,    // Fingering/Sport typically has ~200 meters per 50g ball
+          medium: 200,   // Worsted typically has ~200 meters per 100g ball
+          heavy: 110     // Bulky typically has ~110 meters per 100g ball
+        };
+        
+        const estimatedBalls = Math.ceil(yarnMeters / standardMeteragePerBall[measurements.yarnWeight]);
+        
+        setResults({
+          stitchGauge,
+          rowGauge,
+          bustStitchCount,
+          waistStitchCount,
+          ribbingStitchCount,
+          upperArmStitchCount,
+          cuffRibbingStitchCount,
+          underarmStitchCount,
+          sleeveIncreases,
+          bodyRows,
+          sleeveRows,
+          cuffRibbingRows,
+          yarnMeters,
+          yarnWeightGrams,
+          closestSizeUsed: closestSize,
+          estimatedBalls,
+          standardBallSize: standardBallSizes[measurements.yarnWeight],
+          standardMeteragePerBall: standardMeteragePerBall[measurements.yarnWeight]
+        });
+      };
+      
+      const getYarnWeightName = (weight) => {
+        switch(weight) {
+          case "light": return "fingering sport sock";
+          case "medium": return "DK worsted";
+          case "heavy": return "bulky chunky";
+          default: return "worsted";
+        }
+      };
+      
+      // Yarn fiber content options for each weight
+      const getCommonFiberOptions = (weight) => {
+        switch(weight) {
+          case "light":
+            return [
+              "100% Merino Wool",
+              "75% Wool, 25% Nylon",
+              "80% Superwash Merino, 20% Nylon",
+              "100% Superwash Merino",
+              "60% Cotton, 40% Acrylic",
+              "100% Alpaca"
+            ];
+          case "medium":
+            return [
+              "100% Wool",
+              "85% Wool, 15% Mohair",
+              "50% Wool, 50% Acrylic",
+              "100% Cotton",
+              "100% Superwash Wool",
+              "40% Wool, 40% Alpaca, 20% Silk"
+            ];
+          case "heavy":
+            return [
+              "100% Wool",
+              "80% Wool, 20% Alpaca",
+              "50% Wool, 50% Acrylic",
+              "100% Superwash Wool",
+              "100% Alpaca",
+              "100% Acrylic"
+            ];
+          default:
+            return ["100% Wool"];
+        }
+      };
+      
+      const searchYarnPrice = () => {
+        if (!yarnSearch.brand || !results) {
+          setYarnSearch(prev => ({
+            ...prev,
+            error: "Please enter a yarn brand and calculate stitch counts first."
+          }));
+          return;
+        }
+        
+        setYarnSearch(prev => ({
+          ...prev,
+          searching: true,
+          error: null
+        }));
+        
+        try {
+          // In a real implementation, we would call the web search API here
+          // For this demo, we'll simulate results with realistic price ranges and yarn details
+          
+          const weightType = getYarnWeightName(measurements.yarnWeight);
+          const searchQuery = `${yarnSearch.brand} ${weightType} yarn price fiber content machine washable meterage`;
+          
+          // Save the search data for display
+          const searchData = {
+            brand: yarnSearch.brand,
+            weightType,
+            searchQuery,
+            date: new Date().toLocaleString()
+          };
+          
+          // Generate pricing based on yarn weight (in euros)
+          const basePriceMultipliers = {
+            light: { min: 4.5, max: 9.5 },     // Price per 50g ball for light yarn
+            medium: { min: 10, max: 22 },   // Price per 100g ball for medium yarn
+            heavy: { min: 8.5, max: 17 }     // Price per 100g ball for heavy yarn
+          };
+          
+          // Simulate a web search delay
+          setTimeout(() => {
+            const priceRange = basePriceMultipliers[measurements.yarnWeight];
+            const minPrice = priceRange.min.toFixed(2);
+            const maxPrice = priceRange.max.toFixed(2);
+            const avgPrice = ((parseFloat(minPrice) + parseFloat(maxPrice)) / 2).toFixed(2);
+            
+            // Random selection for fiber content from common options
+            const fiberOptions = getCommonFiberOptions(measurements.yarnWeight);
+            const selectedFiber = fiberOptions[Math.floor(Math.random() * fiberOptions.length)];
+            
+            // Determine if machine washable based on fiber content
+            const isMachineWashable = selectedFiber.includes("Superwash") || 
+                                     selectedFiber.includes("Cotton") || 
+                                     selectedFiber.includes("Acrylic") || 
+                                     Math.random() < 0.3; // Some random non-superwash might still be machine washable
+            
+            // Recommended needle sizes by yarn weight
+            const needleSizeRanges = {
+              light: { min: 2, max: 3.5 },    // mm for fingering/sport
+              medium: { min: 4, max: 5 },   // mm for worsted
+              heavy: { min: 5.5, max: 8 }    // mm for bulky
+            };
+            
+            // Select a needle size from the appropriate range
+            const needleRange = needleSizeRanges[measurements.yarnWeight];
+            const recommendedNeedleSize = `${(Math.random() * (needleRange.max - needleRange.min) + needleRange.min).toFixed(1)} mm`;
+            
+            // Slight variation in meterage per ball
+            const meterageVariation = Math.floor(Math.random() * 21) - 10; // -10 to +10 meters variation
+            const ballMeterage = results.standardMeteragePerBall + meterageVariation;
+            
+            const yarnDetails = {
+              fiberContent: selectedFiber,
+              meteragePerBall: ballMeterage,
+              weightPerBall: `${results.standardBallSize} g`,
+              recommendedNeedleSize: recommendedNeedleSize,
+              machineWashable: isMachineWashable,
+              careInstructions: isMachineWashable ? 
+                "Machine wash gentle in cool water, lay flat to dry" : 
+                "Hand wash in cool water with wool wash, lay flat to dry"
+            };
+            
+            const mockResults = {
+              minPrice,
+              maxPrice,
+              avgPrice,
+              currency: "EUR",
+              totalEstimatedCost: (parseFloat(avgPrice) * results.estimatedBalls).toFixed(2)
+            };
+            
+            setYarnSearch(prev => ({
+              ...prev,
+              searching: false,
+              results: mockResults,
+              lastSearchData: searchData,
+              yarnDetails: yarnDetails
+            }));
+          }, 1500);
+        } catch (error) {
+          setYarnSearch(prev => ({
+            ...prev,
+            searching: false,
+            error: "Error searching for yarn prices. Please try again."
+          }));
+        }
+      };
+  return (
+    <div className="p-6 max-w-lg mx-auto bg-white rounded-lg shadow-md">
+      <h1 className="text-2xl font-bold mb-6 text-center">Sweater Stitch Calculator (Metric)</h1>
+      
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold mb-2">Gauge Swatch Measurements (cm)</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block mb-1 text-sm font-medium">Number of Stitches</label>
+            <input
+              type="number"
+              name="stitchCount"
+              value={gaugeSwatchStats.stitchCount}
+              onChange={handleGaugeChange}
+              className="w-full p-2 border rounded"
+            />
+          </div>
+          <div>
+            <label className="block mb-1 text-sm font-medium">Swatch Width (cm)</label>
+            <input
+              type="number"
+              name="width"
+              value={gaugeSwatchStats.width}
+              onChange={handleGaugeChange}
+              className="w-full p-2 border rounded"
+              step="0.5"
+            />
+          </div>
+          <div>
+            <label className="block mb-1 text-sm font-medium">Number of Rows</label>
+            <input
+              type="number"
+              name="rowCount"
+              value={gaugeSwatchStats.rowCount}
+              onChange={handleGaugeChange}
+              className="w-full p-2 border rounded"
+            />
+          </div>
+          <div>
+            <label className="block mb-1 text-sm font-medium">Swatch Height (cm)</label>
+            <input
+              type="number"
+              name="height"
+              value={gaugeSwatchStats.height}
+              onChange={handleGaugeChange}
+              className="w-full p-2 border rounded"
+              step="0.5"
+            />
+          </div>
+        </div>
+      </div>
+      
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold mb-2">Body Measurements (cm)</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block mb-1 text-sm font-medium">Bust Circumference</label>
+            <input
+              type="number"
+              name="bustCircumference"
+              value={measurements.bustCircumference}
+              onChange={handleMeasurementChange}
+              className="w-full p-2 border rounded"
+              step="0.5"
+            />
+          </div>
+          <div>
+            <label className="block mb-1 text-sm font-medium">Waist Circumference</label>
+            <input
+              type="number"
+              name="waistCircumference"
+              value={measurements.waistCircumference}
+              onChange={handleMeasurementChange}
+              className="w-full p-2 border rounded"
+              step="0.5"
+            />
+          </div>
+          <div>
+            <label className="block mb-1 text-sm font-medium">Total Torso Length</label>
+            <input
+              type="number"
+              name="torsoLength"
+              value={measurements.torsoLength}
+              onChange={handleMeasurementChange}
+              className="w-full p-2 border rounded"
+              step="0.5"
+            />
+          </div>
+          <div>
+            <label className="block mb-1 text-sm font-medium">Ribbing Length</label>
+            <input
+              type="number"
+              name="ribbingLength"
+              value={measurements.ribbingLength}
+              onChange={handleMeasurementChange}
+              className="w-full p-2 border rounded"
+              step="0.5"
+            />
+          </div>
+          <div>
+            <label className="block mb-1 text-sm font-medium">Arm Length (from underarm)</label>
+            <input
+              type="number"
+              name="armLength"
+              value={measurements.armLength}
+              onChange={handleMeasurementChange}
+              className="w-full p-2 border rounded"
+              step="0.5"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="block mb-1 text-sm font-medium">Yarn Weight</label>
+            <select
+              name="yarnWeight"
+              value={measurements.yarnWeight}
+              onChange={handleMeasurementChange}
+              className="w-full p-2 border rounded"
+            >
+              <option value="light">Light (Fingering/Sock/Sport)</option>
+              <option value="medium">Medium (DK/Worsted)</option>
+              <option value="heavy">Heavy (Bulky/Chunky)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      <button 
+        onClick={calculateStitchCounts}
+        className="w-full p-3 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700 transition-colors"
+      >
+        Calculate Stitches
+      </button>
+      
+      {results && (
+        <div className="mt-6">
+          <div className="p-4 bg-blue-50 rounded-lg">
+            <h2 className="text-xl font-semibold mb-2">Results</h2>
+            
+            <div className="grid grid-cols-2 gap-2">
+              <div className="font-medium">Stitch Gauge:</div>
+              <div>{results.stitchGauge.toFixed(2)} sts/cm</div>
+              
+              <div className="font-medium">Row Gauge:</div>
+              <div>{results.rowGauge.toFixed(2)} rows/cm</div>
+              
+              <div className="font-medium">Bust Stitches:</div>
+              <div>{results.bustStitchCount} sts</div>
+              
+              <div className="font-medium">Waist Stitches:</div>
+              <div>{results.waistStitchCount} sts</div>
+              
+              <div className="font-medium">Bottom Ribbing Stitches:</div>
+              <div>{results.ribbingStitchCount} sts</div>
+              
+              <div className="font-medium">Upper Arm Stitches:</div>
+              <div>{results.upperArmStitchCount} sts</div>
+              
+              <div className="font-medium">Cuff Ribbing Stitches:</div>
+              <div>{results.cuffRibbingStitchCount} sts</div>
+              
+              <div className="font-medium">Underarm Stitches:</div>
+              <div>{results.underarmStitchCount} sts</div>
+              
+              <div className="font-medium">Sleeve Increases:</div>
+              <div>{results.sleeveIncreases} sts</div>
+              
+              <div className="font-medium">Body Rows (Underarm to Ribbing):</div>
+              <div>{results.bodyRows} rows</div>
+              
+              <div className="font-medium">Sleeve Rows Without Ribbing:</div>
+              <div>{results.sleeveRows} rows</div>
+              
+              <div className="font-medium">Cuff Ribbing Rows:</div>
+              <div>{results.cuffRibbingRows} rows</div>
+              
+              <div className="font-medium">Estimated Yarn Needed:</div>
+              <div>{results.yarnMeters} meters</div>
+              
+              <div className="font-medium">Estimated Yarn Weight:</div>
+              <div>{results.yarnWeightGrams} g (based on size {results.closestSizeUsed}″)</div>
+              
+              <div className="font-medium">Estimated Balls Needed:</div>
+              <div>{results.estimatedBalls} × {results.standardMeteragePerBall} meters each</div>
+            </div>
+            
+            <div className="mt-4 text-sm text-gray-600">
+              <p>Note: All counts are rounded to the nearest whole number.</p>
+              <p>Sleeve rows calculation: row gauge × (arm length - 10.16 cm)</p>
+              <p>Cuff ribbing calculation: row gauge × 5.08 cm</p>
+              <p>Upper arm calculation: (33.3% of bust stitches) + (stitch gauge × 2.54 cm)</p>
+              <p>Cuff ribbing stitches: 20% of bust stitch count</p>
+              <p>Underarm stitches: 8% of bust stitch count</p>
+              <p>Sleeve increases: upper arm stitches - cuff ribbing stitches</p>
+              <p>Yarn estimates based on standard reference table with metric conversions.</p>
+            </div>
+          </div>
+          
+          <div className="mt-4 p-4 bg-yellow-50 rounded-lg">
+            <h2 className="text-xl font-semibold mb-2">Yarn Price & Details Finder</h2>
+            <div className="mb-4">
+              <label className="block mb-1 text-sm font-medium">Yarn Brand/Type</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={yarnSearch.brand}
+                  onChange={handleYarnSearchChange}
+                  placeholder="e.g., Drops Alpaca"
+                  className="flex-grow p-2 border rounded"
+                />
+                <button
+                  onClick={searchYarnPrice}
+                  disabled={yarnSearch.searching}
+                  className="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700 transition-colors disabled:bg-green-300"
+                >
+                  {yarnSearch.searching ? "Searching..." : "Search Yarn"}
+                </button>
+              </div>
+              {yarnSearch.error && (
+                <p className="mt-2 text-red-600 text-sm">{yarnSearch.error}</p>
+              )}
+            </div>
+            
+            {yarnSearch.lastSearchData && (
+              <div className="mb-2 text-sm text-gray-600">
+                <p>Last search: "{yarnSearch.lastSearchData.searchQuery}"</p>
+              </div>
+            )}
+            
+            {yarnSearch.results && yarnSearch.yarnDetails && (
+              <div className="mt-2 bg-white p-4 rounded-lg border border-gray-200">
+                <h3 className="font-bold text-lg mb-3">
+                  {yarnSearch.brand} {getYarnWeightName(measurements.yarnWeight)}
+                </h3>
+                
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div className="font-medium">Fiber Content:</div>
+                  <div>{yarnSearch.yarnDetails.fiberContent}</div>
+                  
+                  <div className="font-medium">Ball Weight:</div>
+                  <div>{yarnSearch.yarnDetails.weightPerBall}</div>
+                  
+                  <div className="font-medium">Meterage Per Ball:</div>
+                  <div>{yarnSearch.yarnDetails.meteragePerBall} meters</div>
+                  
+                  <div className="font-medium">Recommended Needle Size:</div>
+                  <div>{yarnSearch.yarnDetails.recommendedNeedleSize}</div>
+                  
+                  <div className="font-medium">Machine Washable:</div>
+                  <div>{yarnSearch.yarnDetails.machineWashable ? "Yes" : "No"}</div>
+                  
+                  <div className="font-medium">Care Instructions:</div>
+                  <div>{yarnSearch.yarnDetails.careInstructions}</div>
+                </div>
+                
+                <h3 className="font-bold text-lg mb-2">Price Estimate</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="font-medium">Price Range:</div>
+                  <div>
+                    €{yarnSearch.results.minPrice} - €{yarnSearch.results.maxPrice} per ball
+                  </div>
+                  
+                  <div className="font-medium">Average Price:</div>
+                  <div>€{yarnSearch.results.avgPrice} per ball</div>
+                  
+                  <div className="font-medium">Estimated Total Cost:</div>
+                  <div>
+                    €{yarnSearch.results.totalEstimatedCost} for {results.estimatedBalls} balls
+                  </div>
+                </div>
+                <p className="mt-2 text-sm text-gray-600">
+                  Note: Prices and yarn details are estimates based on typical market data. Actual specifications may vary by retailer and colorway.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+ReactDOM.render(<SweaterCalculator />, document.getElementById('root'));
+</script>
+</body>
+</html>
